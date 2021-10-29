@@ -7,6 +7,7 @@ import argparse
 import csv
 
 from utils import say, die, check_path, which, Hit, translate_fasta, try_open
+from run_mmseqs2 import RunMMseqs2
 
 # ---------------------------------------------------------------
 # constants
@@ -44,9 +45,14 @@ def get_args( ):
                          )
     parser.add_argument( "--diamond",
                          metavar="<path>",
-                         default="diamond",
                          help="Path to diamond binary [default: in PATH]",
                          )
+
+    parser.add_argument( "--mmseqs",
+                         metavar="<path>",
+                         help="Path to mmseqs [default: in PATH]",
+                         )    
+
     parser.add_argument( "--uniref90db",
                          metavar="<path>",
                          required=True,
@@ -79,6 +85,12 @@ def get_args( ):
                          metavar="<string>",
                          help="Additional options to pass to diamond, e.g. --threads",
                          )
+
+    parser.add_argument( "--mmseqs-options",
+                         metavar="<string>",
+                         help="Additional options to pass to mmseqs, e.g. --threads",
+                         )
+
     args = parser.parse_args( )
     return args
 
@@ -214,41 +226,85 @@ def main( ):
         say( "Translating input fasta to:\n ", query )
         translate_fasta( args.fasta, query )
         args.seqtype = "prot"
+    
     # perform uniref90 search
-    uniref90hits = uniref_search( 
-        diamond=args.diamond, 
-        database=args.uniref90db,
-        query=query,
-        seqtype=args.seqtype,
-        temp=args.temp,
-        diamond_options=args.diamond_options,
-        force_search=args.force_search,
-    )
-    uniref90map = parse_results( uniref90hits )
-    # perform uniref50 search
-    uniref50hits = uniref_search( 
-        diamond=args.diamond, 
-        database=args.uniref50db,
-        query=query,
-        seqtype=args.seqtype,
-        temp=args.temp,
-        diamond_options=args.diamond_options,
-        force_search=args.force_search,
-    )
-    uniref50map = parse_results( uniref50hits )
-    # override mappings?
-    overrides = {}
-    if args.transitive_map is not None:
-        overrides = trans_mapping( uniref90map, args.transitive_map )
-    # reannoate the fasta
-    reannotate( 
-        query=args.fasta, 
-        out=args.out, 
-        uniref90map=uniref90map, 
-        uniref50map=uniref50map, 
-        overrides=overrides, )
-    # done
-    say( "Finished successfully." )
+    if args.diamond and not args.mmseqs:
+        uniref90hits = uniref_search( 
+            diamond=args.diamond, 
+            database=args.uniref90db,
+            query=query,
+            seqtype=args.seqtype,
+            temp=args.temp,
+            diamond_options=args.diamond_options,
+            force_search=args.force_search,
+        )
+        uniref90map = parse_results( uniref90hits )
+        # perform uniref50 search
+        uniref50hits = uniref_search( 
+            diamond=args.diamond, 
+            database=args.uniref50db,
+            query=query,
+            seqtype=args.seqtype,
+            temp=args.temp,
+            diamond_options=args.diamond_options,
+            force_search=args.force_search,
+        )
+        uniref50map = parse_results( uniref50hits )
+        # override mappings?
+        overrides = {}
+        if args.transitive_map is not None:
+            overrides = trans_mapping( uniref90map, args.transitive_map )
+        # reannoate the fasta
+        reannotate( 
+            query=args.fasta, 
+            out=args.out, 
+            uniref90map=uniref90map, 
+            uniref50map=uniref50map, 
+            overrides=overrides, )
+        # done
+        say( "Finished successfully." )
+
+    elif args.mmseqs and not args.diamond:
+        c_output_format = "qheader,theader,pident,qlen,qstart,qend,tlen,tstart,tend,evalue"
+        c_mmseqs2_filters = "-e 1.0"
+        uniref90_search = RunMMseqs2(c_output_format = c_output_format,
+                                     c_mmseqs2_filters = c_mmseqs2_filters,
+                                     mmseqs2 = args.mmseqs,
+                                     database = args.uniref90db,
+                                     query = query,
+                                     seqtype = args.seqtype,
+                                     temp = args.temp,
+                                     mmseqs2_options = args.mmseqs_options,
+                                     force_search = args.force_search)
+        uniref90hits = uniref90_search.uniref_search_cleanup()
+        uniref90map = parse_results(uniref90hits)
+        uniref50_search = RunMMseqs2(c_output_format = c_output_format,
+                                     c_mmseqs2_filters = c_mmseqs2_filters,
+                                     mmseqs2 = args.mmseqs,
+                                     database = args.uniref50db,
+                                     query = query,
+                                     seqtype = args.seqtype,
+                                     temp = args.temp,
+                                     mmseqs2_options = args.mmseqs_options,
+                                     force_search = args.force_search)
+        uniref50hits = uniref50_search.uniref_search_cleanup()
+        uniref50map = parse_results(uniref50hits)
+
+        overrides = {}
+        if args.transitive_map is not None:
+            overrides = trans_mapping( uniref90map, args.transitive_map )
+        # reannoate the fasta
+        reannotate( 
+            query=args.fasta, 
+            out=args.out, 
+            uniref90map=uniref90map, 
+            uniref50map=uniref50map, 
+            overrides=overrides, )
+        # done
+        say( "Finished successfully." )
+
+    else:
+        sys.exit("Choose between DIAMOND and MMseqs2. Only one of them !")
 
 if __name__ == "__main__":
     main( )
