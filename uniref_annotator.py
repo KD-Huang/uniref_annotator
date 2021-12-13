@@ -58,11 +58,13 @@ def get_args( ):
                          required=True,
                          help="Path to HUMAnN2-formatted UniRef90 database",
                          )
+
     parser.add_argument( "--uniref50db",
                          metavar="<path>",
                          required=True,
                          help="Path to HUMAnN2-formatted UniRef50 database",
                          )
+
     parser.add_argument( "--transitive-map",
                          metavar="<path>",
                          help="Path to UniRef90->UniRef50 idmapping file (optional)",
@@ -276,7 +278,8 @@ def main( ):
                                      temp = args.temp,
                                      mmseqs2_options = args.mmseqs_options,
                                      force_search = args.force_search)
-        uniref90hits = uniref90_search.uniref_search_cleanup()
+        uniref90hits = uniref90_search.uniref_search()
+        uniref90hits = uniref90_search.uniref_search_cleanup(uniref90hits)
         uniref90map = parse_results(uniref90hits)
         uniref50_search = RunMMseqs2(c_output_format = c_output_format,
                                      c_mmseqs2_filters = c_mmseqs2_filters,
@@ -287,7 +290,8 @@ def main( ):
                                      temp = args.temp,
                                      mmseqs2_options = args.mmseqs_options,
                                      force_search = args.force_search)
-        uniref50hits = uniref50_search.uniref_search_cleanup()
+        uniref50hits = uniref50_search.uniref_search()
+        uniref50hits = uniref50_search.uniref_search_cleanup(uniref50hits) 
         uniref50map = parse_results(uniref50hits)
 
         overrides = {}

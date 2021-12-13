@@ -62,6 +62,7 @@ class RunMMseqs2(MMseqs2):
         command = " ".join(str(k) for k in command)
         command += (" " + self.mmseqs2_options) if self.mmseqs2_options is not None else ""
 
+
         if self.force_search or not os.path.exists(results):
             say("Executing:\n ", command)
             os.system(command)
@@ -70,11 +71,64 @@ class RunMMseqs2(MMseqs2):
 
         return results
 
-    def uniref_search_cleanup(self):
+    def uniref_preidx_search(self, predix):
+
+        if which(self.mmseqs2) is None:
+            die("<mmseqs2> is not executable as: {}".format(self.mmseqs2))
+
+        for path in [self.database, self.query, self.temp, predix]:
+            check_path(path)
+
+        mode = self.get_mode(self.database)
+        results = os.path.split(self.query)[1]
+        query_db = os.path.join(self.temp, "qDB."+ mode + "."+ results)
+        output_db = os.path.join(self.temp, "resDB." + mode + "." + results)
+        results = os.path.join(self.temp, results)
+        results = ".".join([results, mode, "hits"])
+        min_id = float(self.get_mode(results).replace("uniref", ""))/100
+        
+        command1 = [self.mmseqs2,
+                   "createdb",
+                   self.query,
+                   query_db
+                   ] # prepare a command line for createdb queryDB
+
+        command1 = " ".join(str(k) for k in command1)
+        say("Executing:\n ", command1)
+        os.system(command1)     
+        command2 = [
+            self.mmseqs2,
+            "search",
+            query_db,
+            self.database,
+            output_db,
+            predix,
+            "--min-seq-id", min_id,
+            self.c_mmseqs2_filters
+            ]
+
+        command2 = " ".join(str(k) for k in command2)
+        command2 += (" " + self.mmseqs2_options) if self.mmseqs2_options is not None else ""        
+        say("Executing:\n ", command2)
+        os.system(command2)
+        command3 = [self.mmseqs2,
+                    "convertalis",
+                    query_db,
+                    self.database,
+                    output_db,
+                    results,
+                    "--format-output", self.c_output_format,
+                    ]
+        command3 = " ".join(str(k) for k in command3)
+        say("Executing:\n ", command3)
+        os.system(command3)
+
+        return results
+    def uniref_search_cleanup(self, mmseqs2_hits):
         # this function is to truncate query and subject headers in the mmseqs2 blast-tab output
         # so as to generate consistent sequence identifiers just as those from DIAMOND
 
-        raw_mmseqs2_output = self.uniref_search() # get default blast tab from mmseqs2
+        raw_mmseqs2_output = mmseqs2_hits # get default blast tab from mmseqs2
         mmseqs2_blast_tab = open(raw_mmseqs2_output, 'r')
         rowlist = mmseqs2_blast_tab.readlines()
         mmseqs2_blast_tab.close()
